@@ -1,0 +1,160 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: selenium-hub
+  labels:
+    app: selenium-hub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: selenium-hub
+  template:
+    metadata:
+      labels:
+        app: selenium-hub
+    spec:
+      containers:
+        - name: selenium-hub
+          image: selenium/hub:4.8.1
+          ports:
+            - containerPort: 4444
+            - containerPort: 4443
+            - containerPort: 4442
+          resources:
+            limits:
+              memory: "1000Mi"
+              cpu: ".5"
+          livenessProbe:
+            httpGet:
+              path: /wd/hub/status
+              port: 4444
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /wd/hub/status
+              port: 4444
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+ ---
+ apiVersion: v1
+kind: Service
+metadata:
+  name: selenium-hub
+  labels:
+    app: selenium-hub
+spec:
+  ports:
+    - port: 4444
+      targetPort: 4444
+      name: port0
+    - port: 4443
+      targetPort: 4443
+      name: port1
+    - port: 4442
+      targetPort: 4442
+      name: port2
+  selector:
+    app: selenium-hub
+  type: LoadBalancer
+  sessionAffinity: None
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+  name: selenium-hub
+spec:
+  rules:
+    - host: $YOUR_DOMAIN_URI
+      http:
+        paths:
+          - backend:
+              service:
+                name: selenium-hub
+                port:
+                  number: 4444
+            path: /
+            pathType: Prefix
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: selenium-node-chrome
+  labels:
+    app: selenium-node-chrome
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: selenium-node-chrome
+  template:
+    metadata:
+      labels:
+        app: selenium-node-chrome
+    spec:
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+      containers:
+        - name: selenium-node-chrome
+          image: selenium/node-chrome:4.8.1
+          ports:
+            - containerPort: 5555
+          volumeMounts:
+            - mountPath: /dev/shm
+              name: dshm
+          env:
+            - name: SE_EVENT_BUS_HOST
+              value: "selenium-hub"
+            - name: SE_EVENT_BUS_SUBSCRIBE_PORT
+              value: "4443"
+            - name: SE_EVENT_BUS_PUBLISH_PORT
+              value: "4442"
+            - name: SE_NODE_MAX_INSTANCES
+              value: "1"
+            - name: SE_NODE_MAX_SESSIONS
+              value: "1"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: selenium-node-firefox
+  labels:
+    app: selenium-node-firefox
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: selenium-node-firefox
+  template:
+    metadata:
+      labels:
+        app: selenium-node-firefox
+    spec:
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+      containers:
+        - name: selenium-node-firefox
+          image: selenium/node-firefox:4.8.1
+          ports:
+            - containerPort: 5555
+          volumeMounts:
+            - mountPath: /dev/shm
+              name: dshm
+          env:
+            - name: SE_EVENT_BUS_HOST
+              value: "selenium-hub"
+            - name: SE_EVENT_BUS_SUBSCRIBE_PORT
+              value: "4443"
+            - name: SE_EVENT_BUS_PUBLISH_PORT
+              value: "4442"
+            - name: SE_NODE_MAX_INSTANCES
+              value: "1"
+            - name: SE_NODE_MAX_SESSIONS
+              value: "1"
